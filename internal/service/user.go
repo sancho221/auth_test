@@ -1,10 +1,18 @@
+//go:generate mockgen -source=user.go -destination=mock_user.go -package=service -typed
 package service
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
 )
 
 var (
@@ -12,12 +20,14 @@ var (
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrExpiredToken       = errors.New("token expired")
 	ErrUserNotFound       = errors.New("user not found")
+	ErrInvalidTypeToken   = errors.New("invalid token type")
+	ErrUserAlreadyExists  = errors.New("user already exists")
 )
 
 type UserService interface {
-	ValidateCredentials(username, password string) (bool, error)
-	GenerateToken(username string) (string, error)
-	RefreshToken(token string) (string, error)
+	ValidateCredentials(ctx context.Context, username, password string) (bool, error)
+	GenerateToken(ctx context.Context, username string, TokenType string) (string, error)
+	RefreshToken(ctx context.Context, token string) (string, error)
 }
 
 type User struct {
@@ -26,7 +36,7 @@ type User struct {
 }
 
 type UserStore interface {
-	Get(username string) (*User, error)
+	Get(ctx context.Context, username string) (*User, error)
 }
 
 type userService struct {
@@ -41,29 +51,53 @@ func NewUserService(store UserStore, jwtSecret string) UserService {
 	}
 }
 
-func (s *userService) ValidateCredentials(username, password string) (bool, error) {
-	user, err := s.store.Get(username)
+func (s *userService) ValidateCredentials(ctx context.Context, username, password string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	user, err := s.store.Get(ctx, username)
 	if err != nil {
 		return false, ErrInvalidCredentials
 	}
 
-	if user.Password != password {
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
 		return false, ErrInvalidCredentials
 	}
 
 	return true, nil
 }
 
-func (s *userService) GenerateToken(username string) (string, error) {
+func (s *userService) GenerateToken(ctx context.Context, username string, tokenType string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	var ttl time.Duration
+	switch tokenType {
+	case TokenTypeAccess:
+		ttl = time.Hour
+	case TokenTypeRefresh:
+		ttl = 30 * 24 * time.Hour
+	default:
+		return "", ErrInvalidTypeToken
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": username,
-		"exp": time.Now().Add(time.Hour).Unix(),
+		"sub":  username,
+		"exp":  time.Now().Add(ttl).Unix(),
+		"type": tokenType,
 	})
 
 	return token.SignedString([]byte(s.jwtSecret))
 }
 
-func (s *userService) RefreshToken(tokenString string) (string, error) {
+func (s *userService) RefreshToken(ctx context.Context, tokenString string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return []byte(s.jwtSecret), nil
 	})
@@ -73,8 +107,13 @@ func (s *userService) RefreshToken(tokenString string) (string, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		// Проверка на refresh токен
+		if tokenType, ok := claims["type"].(string); !ok || tokenType != TokenTypeRefresh {
+			return "", ErrInvalidTypeToken
+		}
+
 		if username, ok := claims["sub"].(string); ok {
-			return s.GenerateToken(username)
+			return s.GenerateToken(ctx, username, TokenTypeAccess)
 		}
 	}
 

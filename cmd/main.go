@@ -7,17 +7,13 @@ import (
 	"auth_test/internal/store"
 	"log"
 	"net/http"
-
-	"go.uber.org/zap"
 )
 
 func main() {
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-
-	// sugar := logger.Sugar()
-
-	cfg := configs.LoadConfig()
+	cfg, err := configs.LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
 
 	userStore := store.NewInMemoryStore()
 	userService := service.NewUserService(userStore, cfg.JWTSecret)
@@ -29,11 +25,4 @@ func main() {
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, nil))
-
-	// логи
-	// sugar.Info("Auth service starting...")
-	// sugar.Infof("Server port: %s", cfg.Port)
-
-	// sugar.Info("Service stopped")
-
 }

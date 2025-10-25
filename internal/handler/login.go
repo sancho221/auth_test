@@ -2,7 +2,7 @@ package handler
 
 import (
 	"auth_test/internal/service"
-	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -17,32 +17,46 @@ func NewLoginHandler(userService service.UserService) *LoginHandler {
 }
 
 func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	username, password, ok := r.BasicAuth()
 	if !ok {
-		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
+		JSONError(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
 		return
 	}
 
-	valid, err := h.userService.ValidateCredentials(username, password)
-	if err != nil || !valid {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		return
-	}
-
-	token, err := h.userService.GenerateToken(username)
+	valid, err := h.userService.ValidateCredentials(ctx, username, password)
 	if err != nil {
-		println("Token generation error:", err.Error())
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		if errors.Is(err, service.ErrInvalidCredentials) || errors.Is(err, service.ErrUserNotFound) {
+			JSONError(w, "Invalid credentials", http.StatusUnauthorized)
+		} else {
+			JSONError(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+	if !valid {
+		JSONError(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	w.Header().Set("Authorization", "Bearer "+token)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	response := map[string]string{
-		"message": "Login successful",
-		"token":   token,
+	accessToken, err := h.userService.GenerateToken(ctx, username, service.TokenTypeAccess)
+	if err != nil {
+		JSONError(w, "Failed to generate assecc token", http.StatusInternalServerError)
+		return
 	}
-	json.NewEncoder(w).Encode(response)
+
+	refreshToken, err := h.userService.GenerateToken(ctx, username, service.TokenTypeRefresh)
+	if err != nil {
+		JSONError(w, "Failed to generate refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	response := LoginResponse{
+		Message:      "Login successful",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
+	}
+
+	JSONSuccess(w, response, http.StatusOK)
 }

@@ -1,20 +1,22 @@
 package configs
 
-import "github.com/spf13/viper"
+import (
+	"fmt"
+
+	"github.com/caarlos0/env/v11"
+)
 
 type Config struct {
-	JWTSecret string
-	Port      string
+	JWTSecret string `env:"JWT_SECRET"`
+	Port      string `env:"SERVER_PORT"`
 }
 
-func LoadConfig() *Config {
-	viper.SetDefault("JWT_SECRET", "default-secret-key")
-	viper.SetDefault("SERVER_PORT", "8082")
+func LoadConfig() (*Config, error) {
+	cfg := &Config{}
 
-	viper.AutomaticEnv()
-
-	return &Config{
-		JWTSecret: viper.GetString("JWT_SECRET"),
-		Port:      viper.GetString("SERVER_PORT"),
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
+
+	return cfg, nil
 }

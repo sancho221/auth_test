@@ -2,8 +2,8 @@ package handler
 
 import (
 	"auth_test/internal/service"
-	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type VerifyHandler struct {
@@ -17,32 +17,43 @@ func NewVerifyHandler(userService service.UserService) *VerifyHandler {
 }
 
 func (h *VerifyHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+		JSONError(w, "Missing Authorization header", http.StatusUnauthorized)
 		return
 	}
 
-	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
-		http.Error(w, "Invalid Authorization format", http.StatusUnauthorized)
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 {
+		JSONError(w, "Invalid Authorization format: expected 'Bearer <token>'", http.StatusUnauthorized)
 		return
 	}
 
-	token := authHeader[7:]
-	newToken, err := h.userService.RefreshToken(token)
+	if !strings.EqualFold(parts[0], "Bearer") {
+		JSONError(w, "Invalid Authorization scheme: expected Bearer", http.StatusUnauthorized)
+		return
+	}
+
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		JSONError(w, "Authorization token is empty", http.StatusUnauthorized)
+		return
+	}
+
+	newAccessToken, err := h.userService.RefreshToken(ctx, token)
 	if err != nil {
-		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		JSONError(w, "Invalid or expired token", http.StatusUnauthorized)
 		return
 	}
 
-	w.Header().Set("Authorization", "Bearer "+token)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	response := map[string]string{
-		"message": "Token refreshed",
-		"token":   newToken,
+	response := VerifyResponse{
+		Message:     "Token refreshed",
+		AccessToken: newAccessToken,
+		TokenType:   "Bearer",
 	}
-	json.NewEncoder(w).Encode(response)
+
+	JSONSuccess(w, response, http.StatusOK)
 
 }
