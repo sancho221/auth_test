@@ -1,0 +1,34 @@
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - JWT_SECRET=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjEzNDEzNzUsInN1YiI6ImFkbWluIn0.vjnzJdf48OWW4YzQSh7l0fs0CExfbniXoTsqemM4rkU
+    networks:
+      - auth-network
+    depends_on:
+      - postgres
+    
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=authdb
+      - POSTGRES_USER=authuser
+      - POSTGRES_PASSWORD=authpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - auth-network
+  
+volumes:
+  postgres_data:
+
+networks:
+  auth-network:
+    driver: bridge
