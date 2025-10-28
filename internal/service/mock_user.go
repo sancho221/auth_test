@@ -40,6 +40,44 @@ func (m *MockUserService) EXPECT() *MockUserServiceMockRecorder {
 	return m.recorder
 }
 
+// CreateUser mocks base method.
+func (m *MockUserService) CreateUser(ctx context.Context, username, password string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUser", ctx, username, password)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateUser indicates an expected call of CreateUser.
+func (mr *MockUserServiceMockRecorder) CreateUser(ctx, username, password any) *MockUserServiceCreateUserCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*MockUserService)(nil).CreateUser), ctx, username, password)
+	return &MockUserServiceCreateUserCall{Call: call}
+}
+
+// MockUserServiceCreateUserCall wrap *gomock.Call
+type MockUserServiceCreateUserCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUserServiceCreateUserCall) Return(arg0 error) *MockUserServiceCreateUserCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUserServiceCreateUserCall) Do(f func(context.Context, string, string) error) *MockUserServiceCreateUserCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUserServiceCreateUserCall) DoAndReturn(f func(context.Context, string, string) error) *MockUserServiceCreateUserCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // GenerateToken mocks base method.
 func (m *MockUserService) GenerateToken(ctx context.Context, username, TokenType string) (string, error) {
 	m.ctrl.T.Helper()
@@ -80,18 +118,18 @@ func (c *MockUserServiceGenerateTokenCall) DoAndReturn(f func(context.Context, s
 }
 
 // RefreshToken mocks base method.
-func (m *MockUserService) RefreshToken(ctex context.Context, token string) (string, error) {
+func (m *MockUserService) RefreshToken(ctx context.Context, token string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshToken", ctex, token)
+	ret := m.ctrl.Call(m, "RefreshToken", ctx, token)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RefreshToken indicates an expected call of RefreshToken.
-func (mr *MockUserServiceMockRecorder) RefreshToken(ctex, token any) *MockUserServiceRefreshTokenCall {
+func (mr *MockUserServiceMockRecorder) RefreshToken(ctx, token any) *MockUserServiceRefreshTokenCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockUserService)(nil).RefreshToken), ctex, token)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockUserService)(nil).RefreshToken), ctx, token)
 	return &MockUserServiceRefreshTokenCall{Call: call}
 }
 
@@ -216,6 +254,44 @@ func (c *MockUserStoreGetCall) Do(f func(context.Context, string) (*User, error)
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockUserStoreGetCall) DoAndReturn(f func(context.Context, string) (*User, error)) *MockUserStoreGetCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Store mocks base method.
+func (m *MockUserStore) Store(ctx context.Context, user User) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Store", ctx, user)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Store indicates an expected call of Store.
+func (mr *MockUserStoreMockRecorder) Store(ctx, user any) *MockUserStoreStoreCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockUserStore)(nil).Store), ctx, user)
+	return &MockUserStoreStoreCall{Call: call}
+}
+
+// MockUserStoreStoreCall wrap *gomock.Call
+type MockUserStoreStoreCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUserStoreStoreCall) Return(arg0 error) *MockUserStoreStoreCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUserStoreStoreCall) Do(f func(context.Context, User) error) *MockUserStoreStoreCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUserStoreStoreCall) DoAndReturn(f func(context.Context, User) error) *MockUserStoreStoreCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

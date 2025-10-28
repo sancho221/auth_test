@@ -2,69 +2,73 @@ package handler
 
 import (
 	"auth_test/internal/service"
+	"auth_test/pkg/pb"
+	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-func TestLoginHandler_TableDriven(t *testing.T) {
+func TestAuthService_Login(t *testing.T) {
 	tests := []struct {
-		name           string
-		username       string
-		password       string
-		mockValid      bool
-		mockErr        error
-		expectedStatus int
-		expectedBody   string
+		name          string
+		username      string
+		password      string
+		mockValid     bool
+		mockErr       error
+		expectedCode  codes.Code
+		expectedToken string
+		expectedError string
 	}{
 		{
-			name:           "successful login",
-			username:       "admin",
-			password:       "admin123",
-			mockValid:      true,
-			mockErr:        nil,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "access-token-123",
+			name:          "successful login",
+			username:      "admin",
+			password:      "admin123",
+			mockValid:     true,
+			mockErr:       nil,
+			expectedCode:  codes.OK,
+			expectedToken: "access-token-123",
 		},
 		{
-			name:           "invalid credentials - wrong password",
-			username:       "admin",
-			password:       "wrongpassword",
-			mockValid:      false,
-			mockErr:        service.ErrInvalidCredentials,
-			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   "Invalid credentials",
+			name:          "invalid credentials - wrong password",
+			username:      "admin",
+			password:      "wrongpassword",
+			mockValid:     false,
+			mockErr:       service.ErrInvalidCredentials,
+			expectedCode:  codes.Unauthenticated,
+			expectedError: "invalid credentials",
 		},
 		{
-			name:           "invalid credentials - user not found",
-			username:       "nonexists",
-			password:       "anypassword",
-			mockValid:      false,
-			mockErr:        service.ErrUserNotFound,
-			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   "Invalid credentials",
+			name:          "invalid credentials - user not found",
+			username:      "nonexists",
+			password:      "anypassword",
+			mockValid:     false,
+			mockErr:       service.ErrUserNotFound,
+			expectedCode:  codes.Unauthenticated,
+			expectedError: "invalid credentials",
 		},
 		{
-			name:           "server error",
-			username:       "admin",
-			password:       "admin123",
-			mockValid:      false,
-			mockErr:        errors.New("database connection failed"),
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "Internal server error",
+			name:          "server error",
+			username:      "admin",
+			password:      "admin123",
+			mockValid:     false,
+			mockErr:       errors.New("database connection failed"),
+			expectedCode:  codes.Unauthenticated,
+			expectedError: "invalid credentials",
 		},
 		{
-			name:           "missing basic auth",
-			username:       "",
-			password:       "",
-			mockValid:      false,
-			mockErr:        nil,
-			expectedStatus: http.StatusUnauthorized,
-			expectedBody:   "Missing or invalid Authorization header",
+			name:          "empty credentials",
+			username:      "",
+			password:      "",
+			mockValid:     false,
+			mockErr:       nil,
+			expectedCode:  codes.Unauthenticated,
+			expectedError: "invalid credentials",
 		},
 	}
 
@@ -82,20 +86,32 @@ func TestLoginHandler_TableDriven(t *testing.T) {
 					mockService.EXPECT().GenerateToken(gomock.Any(), tt.username, service.TokenTypeAccess).Return("access-token-123", nil)
 					mockService.EXPECT().GenerateToken(gomock.Any(), tt.username, service.TokenTypeRefresh).Return("refresh-token-456", nil)
 				}
+			} else {
+				mockService.EXPECT().ValidateCredentials(gomock.Any(), "", "").Return(false, nil)
 			}
 
-			handler := NewLoginHandler(mockService)
-			req := httptest.NewRequest("POST", "/login", nil)
+			handler := NewGRPCHandler(mockService)
 
-			if tt.username != "" && tt.password != "" {
-				req.SetBasicAuth(tt.username, tt.password)
+			req := &pb.LoginRequest{
+				Username: tt.username,
+				Password: tt.password,
 			}
 
-			rr := httptest.NewRecorder()
-			handler.Handle(rr, req)
+			resp, err := handler.Login(context.Background(), req)
 
-			assert.Equal(t, tt.expectedStatus, rr.Code, "Status code mismatch")
-			assert.Contains(t, rr.Body.String(), tt.expectedBody, "Responsy body mismatch")
+			if tt.expectedCode == codes.OK {
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				assert.Equal(t, tt.expectedToken, resp.AccessToken)
+				assert.Equal(t, "refresh-token-456", resp.RefreshToken)
+				assert.Equal(t, "Bearer", resp.TokenType)
+			} else {
+				require.Error(t, err)
+				st, ok := status.FromError(err)
+				require.True(t, ok)
+				assert.Equal(t, tt.expectedCode, st.Code())
+				assert.Contains(t, st.Message(), tt.expectedError)
+			}
 		})
 	}
 }

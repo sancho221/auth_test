@@ -2,25 +2,57 @@ services:
   auth-service:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
+    container_name: auth-service
     ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
+      - "${GRPC_PORT}:${GRPC_PORT}"
+      - "${METRICS_PORT}:${METRICS_PORT}"
     environment:
-      - SERVER_PORT=${SERVER_PORT}
+      - GRPC_PORT=${GRPC_PORT}
       - JWT_SECRET=${JWT_SECRET}
+      - METRICS_PORT=${METRICS_PORT}
+      - DB_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB} 
+      - POSTGRES_USER=${POSTGRES_USER} 
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} 
     depends_on:
       - postgres
     
   postgres:
     image: postgres:15-alpine
+    container_name: postgres
     environment:
-      - POSTGRES_DB=5432
-      - POSTGRES_USER=authdb
-      - POSTGRES_PASSWORD=authuser
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command: 
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-remote-write-receiver'
+    depends_on:
+      - auth-service
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
   
 volumes:
   postgres_data:

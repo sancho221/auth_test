@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package auth;
+option go_package = ".;pb";
+
+service AuthService {
+    rpc Login(LoginRequest) returns(LoginResponse);
+    rpc VerifyToken(VerifyTokenRequest) returns(VerifyTokenResponse);
+}
+
+message LoginRequest {
+    string username = 1;
+    string password = 2;
+}
+
+message LoginResponse {
+    string message = 1;
+    string access_token = 2;
+    string refresh_token = 3;
+    string token_type = 4;
+}
+
+message VerifyTokenRequest {
+    string token = 1;
+}
+
+message VerifyTokenResponse {
+    string message = 1;
+    string access_token = 2;
+    string token_type = 3;
+    bool valid = 4;
+}

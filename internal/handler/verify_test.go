@@ -2,79 +2,69 @@ package handler
 
 import (
 	"auth_test/internal/service"
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"auth_test/pkg/pb"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-func TestVerifyHandler_TableDriven(t *testing.T) {
+func TestAuthService_VerifyToken(t *testing.T) {
 	tests := []struct {
 		name            string
-		authHeader      string
+		token           string
 		mockReturnToken string
 		mockErr         error
-		expectedStatus  int
-		expectedBody    string
+		expectedValid   bool
+		expectedToken   string
+		expectedMessage string
 	}{
 		{
 			name:            "successful token refresh",
-			authHeader:      "Bearer valid-token",
+			token:           "valid-token",
 			mockReturnToken: "new-access-token",
 			mockErr:         nil,
-			expectedStatus:  http.StatusOK,
-			expectedBody:    "new-access-token",
+			expectedValid:   true,
+			expectedToken:   "new-access-token",
+			expectedMessage: "Token refreshed",
+		},
+		{
+			name:            "token is already valid",
+			token:           "valid-token",
+			mockReturnToken: "valid-token",
+			mockErr:         nil,
+			expectedValid:   true,
+			expectedToken:   "",
+			expectedMessage: "Token is valid",
 		},
 		{
 			name:            "expired token",
-			authHeader:      "Bearer expired-token",
+			token:           "expired-token",
 			mockReturnToken: "",
 			mockErr:         service.ErrExpiredToken,
-			expectedStatus:  http.StatusUnauthorized,
-			expectedBody:    "Invalid or expired token",
+			expectedValid:   false,
+			expectedToken:   "",
+			expectedMessage: "Token is invalid",
 		},
 		{
 			name:            "invalid token",
-			authHeader:      "Bearer invalid-token",
+			token:           "invalid-token",
 			mockReturnToken: "",
 			mockErr:         service.ErrInvalidToken,
-			expectedStatus:  http.StatusUnauthorized,
-			expectedBody:    "Invalid or expired token",
-		},
-		{
-			name:            "missing authorization header",
-			authHeader:      "",
-			mockReturnToken: "",
-			mockErr:         nil,
-			expectedStatus:  http.StatusUnauthorized,
-			expectedBody:    "Missing Authorization header",
-		},
-		{
-			name:            "invalid authorization format",
-			authHeader:      "Bearer token extra",
-			mockReturnToken: "",
-			mockErr:         nil,
-			expectedStatus:  http.StatusUnauthorized,
-			expectedBody:    "Invalid Authorization format",
-		},
-		{
-			name:            "wrong authorization scheme",
-			authHeader:      "Basic token123",
-			mockReturnToken: "",
-			mockErr:         nil,
-			expectedStatus:  http.StatusUnauthorized,
-			expectedBody:    "Invalid Authorization scheme",
+			expectedValid:   false,
+			expectedToken:   "",
+			expectedMessage: "Token is invalid",
 		},
 		{
 			name:            "empty token",
-			authHeader:      "Bearer ",
+			token:           "",
 			mockReturnToken: "",
 			mockErr:         nil,
-			expectedStatus:  http.StatusUnauthorized,
-			expectedBody:    "Authorization token is empty",
+			expectedValid:   false,
+			expectedToken:   "",
+			expectedMessage: "Token is invalid",
 		},
 	}
 
@@ -85,26 +75,31 @@ func TestVerifyHandler_TableDriven(t *testing.T) {
 
 			mockService := service.NewMockUserService(ctrl)
 
-			if tt.authHeader != "" {
-				parts := strings.Split(tt.authHeader, " ")
-				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && strings.TrimSpace(parts[1]) != "" {
-					token := strings.TrimSpace(parts[1])
-					mockService.EXPECT().RefreshToken(gomock.Any(), token).Return(tt.mockReturnToken, tt.mockErr)
-				}
+			if tt.token != "" {
+				mockService.EXPECT().RefreshToken(gomock.Any(), tt.token).Return(tt.mockReturnToken, tt.mockErr)
 			}
 
-			handler := NewVerifyHandler(mockService)
-			req := httptest.NewRequest("POST", "/verify", nil)
+			handler := NewGRPCHandler(mockService)
 
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
+			req := &pb.VerifyTokenRequest{
+				Token: tt.token,
 			}
 
-			rr := httptest.NewRecorder()
-			handler.Handle(rr, req)
+			resp, err := handler.VerifyToken(context.Background(), req)
 
-			assert.Equal(t, tt.expectedStatus, rr.Code)
-			assert.Contains(t, rr.Body.String(), tt.expectedBody)
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			assert.Equal(t, tt.expectedValid, resp.Valid)
+			assert.Equal(t, tt.expectedMessage, resp.Message)
+
+			if tt.expectedToken != "" {
+				assert.Equal(t, tt.expectedToken, resp.AccessToken)
+				assert.Equal(t, "Bearer", resp.TokenType)
+			} else {
+				assert.Empty(t, resp.AccessToken)
+				assert.Empty(t, resp.TokenType)
+			}
 		})
 	}
 }
